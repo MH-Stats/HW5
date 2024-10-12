@@ -1,0 +1,561 @@
+---
+title: "HW5"
+author: "Mark Heinen"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: inline
+---
+
+## Task 1: Read in Data and Modify
+
+### Step 1
+
+Reading in data using the provided R code with modifications
+
+```{r}
+d1=read.table("student/student-mat.csv",sep=";",header=TRUE)
+d2=read.table("student/student-por.csv",sep=";",header=TRUE)
+
+d3=merge(d1,d2,by=c("school","sex","age","address","famsize","Pstatus","Medu","Fedu","Mjob","Fjob","reason","nursery","internet"))
+print(nrow(d3)) # 382 students
+
+```
+
+### Step 2
+
+Using functions from the tidyverse to repeat step 1 with tidyverse functions
+
+```{r}
+library(tidyverse)
+data1 = read.csv2("student/student-mat.csv", header = TRUE)
+data2 = read.csv2("student/student-por.csv", header = TRUE)
+# turning data1 and data2 into tibbles
+data1 <- as_tibble(data1)
+data2 <- as_tibble(data2)
+
+data3 <- data1 |>
+  inner_join(data2, 
+            by = c("school","sex","age","address","famsize","Pstatus","Medu","Fedu","Mjob","Fjob","reason","nursery","internet"))
+```
+
+When using inner_join the warning message "Detected an unexpected many-to-many relationship between x and y" appears. I am unsure if this need sto be addressed, as checking d3 against data3 shows that they have the same number of observations and variables. An error compared to the d3 data frame is that the varaibles nursery and internet appear to be out of order as they are stuck in the middle of the "x" variables.
+
+An eaiser way to double check the data is to seperate the data out into two seperate tables by the x columns and the y columns
+
+```{r}
+x_check <- data3 |> 
+  select(ends_with(".x"))
+
+y_check <- data3 |>
+  select(ends_with(".y"))
+
+#Also checking the varaibles we grouped by
+by_check <- data3 |>
+  select(!c(ends_with(".x"), ends_with(".y")))
+  
+```
+
+We also need to check for NA values, so we are going to use the function seen in the EDA basics lecture
+
+```{r}
+sum_na <- function(column){
+  sum(is.na(column))
+}
+na_counts <- data3 |>
+  summarise(across(everything(), sum_na)) #across() applies to every column while everything() is the specifier
+na_counts
+```
+
+Based off these results everything also appears normal as no NA's were found, but when double checking against the variable list on the ULC machine learning repository some are listed as binary variables. These variables like "sex" may need to be converted to factors. Of course there is the case of repeating variables but that is fixed in step 3
+
+### Step 3
+
+The next step we need to take is to do an inner_join() on all variables other than G1, G2, G3, paid, and absences.
+
+```{r}
+combo_data <- data1 |>
+  inner_join(data2 |> select(-G1, -G2, -G3, -paid, -absences))
+```
+
+### Step 4
+
+Taking 4 categorical variables of for math data, Portuguese, and combined data and convert them into factors in each tibble. The four variables I want to look at our famsize, Pstatus, sex, and romantic. That way I can examine how family size, parents cohabitation status, romantic status, and gender impacts the data.
+
+```{r}
+#renaming datasets for clarity and making sure they are tibbles
+math_data <- data1
+por_data <- data2
+
+#Using function to make variables into factors
+factorizer <- function(tibble_data){
+  valid_cat_vars <- c("sex", "famsize", "Pstatus", "romantic")
+  sex_lab <- c("Female", "Male")
+  famsize_lab <- c("3_or_less", "3_plus")
+  Pstatus_lab <- c("Together", "Apart")
+  romantic_lab <- c("dating_yes", "dating_no")
+  
+  for(var in colnames(tibble_data)){
+    if(var %in% valid_cat_vars){
+      tibble_data[[var]] <- as.factor(tibble_data[[var]])
+    }
+  }
+  #Creating labels for each variable
+    if ("sex" %in% colnames(tibble_data)) {
+    tibble_data <- tibble_data |>
+      mutate(
+        Sex_f = factor(sex, levels = c("F", "M"), labels = c("Female", "Male")))
+  }
+  if ("famsize" %in% colnames(tibble_data)) {
+    tibble_data <- tibble_data |>
+      mutate(
+        famsize_f = factor(famsize, labels = famsize_lab))
+  }
+  if ("Pstatus" %in% colnames(tibble_data)) {
+    tibble_data <- tibble_data |>
+      mutate(
+        Pstatus_F = factor(Pstatus, labels = Pstatus_lab))
+  }
+  if ("romantic" %in% colnames(tibble_data)) {
+    tibble_data <- tibble_data |>
+      mutate(
+        romantic_F = factor(romantic, labels = romantic_lab))
+  } 
+  
+}
+#running function to make variables into factors
+math_data <- factorizer(math_data)
+por_data <- factorizer(por_data) 
+combo_data <- factorizer(combo_data) 
+
+
+```
+
+## Task 2: Summarize the Data
+
+First step checking for how the data is stored in combo_data
+
+```{r}
+#selecting columns
+math_cat <- math_data |>
+  select(Sex_f, famsize_f, Pstatus_F, romantic_F)
+
+por_cat <- por_data |>
+  select(Sex_f, famsize_f, Pstatus_F, romantic_F)
+
+combo_cat <- combo_data |>
+  select(Sex_f, famsize_f, Pstatus_F, romantic_F)
+```
+
+```{r}
+#Checking for missing values
+combo_na <- combo_cat |>
+  summarise(across(everything(), sum_na)) 
+combo_na
+```
+
+No missing values were found nothing was NA
+
+### Categorical Variables
+
+#### Using table()
+
+Creating one-way, two-way, and three-way contingency tables using table()
+
+```{r}
+# one-way table
+table1_combo_data <- table(combo_data$Sex_f)
+table1_combo_data
+```
+
+Female: 174, which means roughly 54% of the students were female
+
+```{r}
+#two-way table
+table2_combo_data <- table(combo_data$Sex_f, combo_data$famsize_f)
+table2_combo_data
+```
+
+Male, 3_plus: 46, which means roughly 14% of the students were males who lived in a family with more than 3 members
+
+```{r}
+# three-way table
+table3_combo_data <- table(combo_data$Sex_f, combo_data$famsize_f, combo_data$Pstatus_F)
+table3_combo_data[, , "Together"]
+```
+
+Together, Female, 3_or_less: 12, which means roughly 4% of the students female with parents who co-habituated and had 3 or less family members
+
+#### Sub-setting tables
+
+```{r}
+# Using filter() to subset data
+school_filter_data <- combo_data |>
+  filter(school == "GP")
+#creating two way table
+school_filter_table <- table(school_filter_data$romantic_F, school_filter_data$Sex_f)
+school_filter_table
+
+#Creating three way table then subsetting it by family size 3_plus
+sub_table <- table(combo_data$romantic_F, combo_data$Sex_f, combo_data$famsize_f)
+sub_table_3_plus <- sub_table[, , 2]
+sub_table_3_plus
+```
+
+#### dplyr tables
+
+```{r}
+# one-way table
+count1_combo_data <- combo_cat |>
+  group_by(Sex_f) |>
+  summarize(count = n())
+count1_combo_data
+```
+
+```{r}
+#two-way table
+count2_combo_data <- combo_cat |>
+  group_by(Sex_f, famsize_f) |>
+  summarize(count = n()) |>
+  pivot_wider(names_from = famsize_f, values_from = count)
+count2_combo_data
+```
+
+count2_combo_data\[2, 3\]: 46, which means roughly 14% of the students were males who lived in a family with more than 3 members
+
+```{r}
+# Three-way table
+count3_combo_data <- combo_cat |>
+  group_by(Sex_f, famsize_f, Pstatus_F) |>
+  summarize(count = n()) |>
+  pivot_wider(names_from = famsize_f, values_from = count)
+count3_combo_data
+```
+
+count3_combo_data\[1, 3\]: 12, which means roughly 4% of the students female with parents who co-habituated and had 3 or less family members
+
+#### Stacked bar graph and side-by-side bar graph
+
+```{r}
+#creating bar graph of sex by family size
+combo_bar <- ggplot(combo_data, aes(x = Sex_f, fill = famsize_f)) + 
+  geom_bar() + 
+    labs(title = "Student sex by Family Size", x = "Sex", y = "Quantity of Students")
+combo_bar
+
+#Creating side-by-side plot
+combo_plot <- ggplot(combo_data, aes(x = Sex_f, fill = famsize_f)) + 
+  geom_bar(position = "dodge") + 
+    labs(title = "Student sex by Family Size", x = "Sex", y = "Quantity of Students")
+combo_plot
+```
+
+### Numeric Variables (and across groups)
+
+#### Center and spread of age, absences, grade variables
+
+```{r}
+#creating a function to summarize mean, median, variance, standard deviation, and IQR
+numeric_summary <- function(data, num_var = "age"){
+  data <- data |>
+  summarize(across(num_var, .fns = list("mean" = mean, # This will create a named list with .fns
+                                       "median" = median,
+                                       "var" = var,
+                                       "sd" = sd,
+                                       "IQR" = IQR), .names = "{.fn}")) # .fn is function names
+}
+#Creating tibble of math data summary
+math_age_summary <- numeric_summary(math_data, "age")
+math_abscenses_summary <- numeric_summary(math_data, "absences")
+math_G1_summary <- numeric_summary(math_data, "G1")
+math_G2_summary <- numeric_summary(math_data, "G2")
+math_G3_summary <- numeric_summary(math_data, "G3")
+
+math_summary <- bind_rows("age" = math_age_summary, 
+                          "abscenses" = math_abscenses_summary, 
+                          "G1" = math_G1_summary, 
+                          "G2" = math_G2_summary, 
+                          "G3" = math_G3_summary, 
+                          .id = "RowName")
+math_summary
+
+#creating tibble of Portuguese data summary
+por_age_summary <- numeric_summary(por_data, "age")
+por_abscenses_summary <- numeric_summary(por_data, "absences")
+por_G1_summary <- numeric_summary(por_data, "G1")
+por_G2_summary <- numeric_summary(por_data, "G2")
+por_G3_summary <- numeric_summary(por_data, "G3")
+
+por_summary <- bind_rows("age" = por_age_summary, 
+                          "abscenses" = por_abscenses_summary, 
+                          "G1" = por_G1_summary, 
+                          "G2" = por_G2_summary, 
+                          "G3" = por_G3_summary, 
+                          .id = "RowName")
+por_summary 
+
+#Repeating this process while subsetting the data for all schools to only include MS school for the math data
+MS_only_data <- math_data |>
+  filter(school == "MS")
+MS_only_data
+
+#Running data through numeric function
+MS_age_summary <- numeric_summary(MS_only_data, "age")
+MS_abscenses_summary <- numeric_summary(MS_only_data, "absences")
+MS_G1_summary <- numeric_summary(MS_only_data, "G1")
+MS_G2_summary <- numeric_summary(MS_only_data, "G2")
+MS_G3_summary <- numeric_summary(MS_only_data, "G3")
+
+#combining rows to get tibble of all summary data
+MS_summary <- bind_rows("age" = MS_age_summary, 
+                          "abscenses" = MS_abscenses_summary, 
+                          "G1" = MS_G1_summary, 
+                          "G2" = MS_G2_summary, 
+                          "G3" = MS_G3_summary, 
+                          .id = "RowName")
+MS_summary 
+
+```
+
+Looking at the data it appears that the mean scores from G1 to G3 decreased in the math group while they increased in the Portuguese group, while the median scores stayed roughly the same only changing to 12 for G3 in the Portuguese data. Ages between the two data sets were also similar having identical medians and near identical means (16.69 for math, 16.74 for Portuguese). One variable that did show a large degree of variance was absences with the math data having a much higher mean and median as well as a higher variance, sd, and IQR. In both groups the mean was higher than the median, this alongside with the high IQR (8 and 6 respectively) indicates that a small number of highly absent students may be skewing the data.
+
+When I filtered the data to only include the MS school in the math data, I found that the mean and median age was much higher at about 18 for the mean and median. Additionally, the mean and median test scores for G1 and G3 were lower than the overall math data mean and median scores.
+
+#### Measures of center and spread when absences are less than 4
+
+```{r}
+#grouping data function
+grouped_numeric_summary <- function(data, num_var = "age"){
+  data <- data |>
+  filter(absences < 4) |>
+  summarize(across(num_var, .fns = list("mean" = mean, # This will create a named list with .fns
+                                       "median" = median,
+                                       "var" = var,
+                                       "sd" = sd,
+                                       "IQR" = IQR), .names = "{.fn}_{.col}")) # .fn is function names
+}
+#summaries for math data
+sub_math_age <- grouped_numeric_summary(math_data, "age")
+sub_math_age
+
+sub_math_abs <- grouped_numeric_summary(math_data, "absences")
+sub_math_abs
+
+sub_math_G3 <- grouped_numeric_summary(math_data, "G3")
+sub_math_G3
+
+#summaries for por data
+sub_por_age <- grouped_numeric_summary(por_data, "age")
+sub_por_age
+
+sub_por_abs <- grouped_numeric_summary(por_data, "absences")
+sub_por_abs
+
+sub_por_G3 <- grouped_numeric_summary(por_data, "G3")
+sub_por_G3
+```
+
+Looking at the data after sub-setting it interestingly shows you that when comparing the sub_math_G3 table to the math_G3_summary that when you filter out students who had more than 4 absences that the mean grades the less than 4 absences group has a lower mean than than when you include all students.
+
+```{r}
+#Mean for sub_math_G3
+sub_math_G3$mean_G3
+#Mean for math_G3_summary
+math_G3_summary$mean
+```
+
+#### Finding measures of center and spread across a single grouping variable
+
+```{r}
+#Finding measures of center and spread across SEX using new function
+sex_numeric_summary <- function(data, num_var = "age"){
+  data |>
+  group_by(sex) |>
+  summarize(across(num_var, .fns = list("mean" = mean, # This will create a named list with .fns
+                                       "median" = median,
+                                       "var" = var,
+                                       "sd" = sd,
+                                       "IQR" = IQR), .names = "{.fn}_{.col}")) # .fn is function names
+} 
+#summaries for math data
+sex_math_age <- sex_numeric_summary(math_data, "age")
+sex_math_age
+
+sex_math_abs <- sex_numeric_summary(math_data, "absences")
+sex_math_abs
+
+sex_math_G3 <- sex_numeric_summary(math_data, "G3")
+sex_math_G3
+
+#summaries for por data
+sex_por_age <- sex_numeric_summary(por_data, "age")
+sex_por_age
+
+sex_por_abs <- sex_numeric_summary(por_data, "absences")
+sex_por_abs
+
+sex_por_G3 <- sex_numeric_summary(por_data, "G3")
+sex_por_G3
+```
+
+Now we can see each summary statistic based off the female or male portion of the students, for instance the the mean ages between females and males for both the math_data and por_data are quite close (por: F = 16.78, M = 16.68) (math: F = 16.73, M = 16.65). We can also see that for mean absences the data is quite close for both math_data (F = 6.21, M = 5.14) and por_data (F = 3.55, M = 3.77). In the math_data it can be seen the the variance (F = 89.22, M = 35.76) and Standard deviation (F = 9.44, M = 5.98) are much higher for female students while the medians are the same for both sexes (4). For G3 scores it can be seen that the mean (F = 9.96, M = 10.91) and median scores (F = 10, M = 11) are higher for male students for the math_data and this trend is reversed in the por_data, means (F = 12.25, M = 11.4) and median (F = 12, M =11).
+
+#### Finding measures of spread across Sex and family size
+
+```{r}
+#Finding measures of center and spread across SEX and family size using new function
+dub_numeric_summary <- function(data, num_var = "age"){
+  data |>
+  group_by(Sex_f, famsize_f ) |>
+  summarize(across(num_var, .fns = list("mean" = mean, # This will create a named list with .fns
+                                       "median" = median,
+                                       "var" = var,
+                                       "sd" = sd,
+                                       "IQR" = IQR), .names = "{.fn}_{.col}")) # .fn is function names
+} 
+#summaries for math data
+dub_math_age <- dub_numeric_summary(math_data, "age")
+dub_math_age
+
+dub_math_abs <- dub_numeric_summary(math_data, "absences")
+dub_math_abs
+
+dub_math_G3 <- dub_numeric_summary(math_data, "G3")
+dub_math_G3
+
+#summaries for por data
+dub_por_age <- dub_numeric_summary(por_data, "age")
+dub_por_age
+
+dub_por_abs <- dub_numeric_summary(por_data, "absences")
+dub_por_abs
+
+dub_por_G3 <- dub_numeric_summary(por_data, "G3")
+dub_por_G3
+```
+
+One thing of interest I was able to find from this was that male students with a family size of 3 or less had the lowest mean G3 Portuguese scores by a large margin with the nearest mean G3 score being 11.96 for males with a family size greater than 3. The opposite trend is found when looking at mean G3 math scores, in this case female students with a family size of 3 or less had the lowest mean scores by over a point at 9.63.
+
+#### Creating a correlation between all numeric variables
+
+```{r}
+#Creating function to replicate process across datasets
+correlation_summary <- function(data, cor_var = "absences"){
+  data <- data |>
+  select(age, absences, G1, G2, G3 ) |>
+  summarize(across(where(is.numeric), .fns = list("correlation" = ~cor(.x, data[[cor_var]])), 
+                                                                  .names = "{cor_var}_{.fn}_{col}")) 
+  return(as.matrix(data))
+}
+#Running function for each variable
+cor_age_math <- correlation_summary(math_data)
+cor_abs_math <- correlation_summary(math_data, "age")
+cor_G1_math <- correlation_summary(math_data, "G1")
+cor_G2_math <- correlation_summary(math_data, "G2")
+cor_G3_math <- correlation_summary(math_data, "G3")
+
+#combining them into one matrix
+cor_math_matrix <- rbind(cor_abs_math, cor_age_math, cor_G1_math, cor_G2_math, cor_G3_math)
+#renaming the rows so it makes sense
+colnames(cor_math_matrix) <- c("age", "absences", "G1", "G2", "G3")
+rownames(cor_math_matrix) <- c("age", "absences", "G1", "G2", "G3")
+cor_math_matrix
+
+#Repeating for portugeuse data
+cor_age_por <- correlation_summary(por_data)
+cor_abs_por <- correlation_summary(por_data, "age")
+cor_G1_por <- correlation_summary(por_data, "G1")
+cor_G2_por <- correlation_summary(por_data, "G2")
+cor_G3_por <- correlation_summary(por_data, "G3")
+
+#combining them into one matrix
+cor_por_matrix <- rbind(cor_abs_por, cor_age_por, cor_G1_por, cor_G2_por, cor_G3_por)
+#renaming the rows so it makes sense
+colnames(cor_por_matrix) <- c("age", "absences", "G1", "G2", "G3")
+rownames(cor_por_matrix) <- c("age", "absences", "G1", "G2", "G3")
+cor_por_matrix
+```
+
+From this data we can find that age has a weak negative correlation with G1 to G3 test scores for both the math and Portuguese scores. Absences also have a weak negative correlation, but interestingly this is not true for G3 math scores with there being an almost non-existent positive correlation of 0.03.
+
+#### Creating a histogram, kernel density plot, and box plot for age & G3 grouped by dating status
+
+Note: I realized I probably was supposed to be doing this data for the combined data set, so I am going to do that from here on out. I would go back and change my code but all I would be doing is switching out the data sets, I got confused by the wording that said the numeric variables for math and Portuguese data on the instructions.
+
+```{r}
+#histogram for age by dating status
+romance_age_histo <- ggplot(combo_data, aes(x = age, fill = romantic_F)) + 
+  geom_histogram(binwidth = 1, alpha = 0.5, position = "identity") + 
+  labs(title = "Age by Dating Status Histogram")
+
+#histogram for G3 by dating status
+romance_G3_histo <- ggplot(combo_data, aes(x = G3, fill = romantic_F)) + 
+  geom_histogram(binwidth = 1, alpha = 0.5, position = "identity") + 
+  theme_light() +
+  labs(title = "G3 by Dating Status Histogram")
+
+#kernal plot for age by dating status
+romance_age_kernal <- ggplot(combo_data, aes(x = age, fill = romantic_F)) + 
+  geom_density(alpha = 0.5, position = "fill") + 
+  labs(title = "Age by Dating Status Kernal Density Plot")
+
+#kernal plot for G3 by dating status
+romance_G3_kernal <- ggplot(combo_data, aes(x = G3, fill = romantic_F)) + 
+  geom_density(alpha = 0.5, position = "fill") + 
+  theme_light() +
+  labs(title = "G3 by Dating Status Kernal Density Plot")
+
+#boxplot for age by dating status
+romance_age_box <- ggplot(combo_data)  + 
+  geom_boxplot(aes(x = romantic_F, y = age, fill = romantic_F)) + 
+  labs(title = "Age by Dating Status Box Plot")
+
+#boxplot for G3 by dating status
+romance_G3_box <- ggplot(combo_data) + 
+  geom_boxplot(aes(x = romantic_F, y = G3, fill = romantic_F)) + 
+  theme_light() +
+  labs(title = "G3 by Dating Status Box Plot")
+
+#printing plots 
+romance_age_histo
+romance_G3_histo
+romance_age_kernal
+romance_G3_kernal
+romance_age_box
+romance_G3_box
+```
+
+Based off the data we were able to find a couple things that stand out, the first one being that when looking at age by dating status histogram you can see that younger students were more likely to be dating than not dating, but as they got closer to the age of 18 this difference started to decrease.This is also backed up by the age by dating status box plot which shows that the mean age of non-daters is higher than the mean age for students who are dating.
+
+#### Creating scatter plots that compare G3 to another numerical variable grouped by sex
+
+```{r}
+#plotting G3 by age 
+g3_age_scatter <- ggplot(combo_data, aes(x = age, y = G3, color = Sex_f)) + 
+  geom_point(position = "jitter") + 
+  labs(title = "Age by G3 Scatter Plot", color = "Sex")
+g3_age_scatter
+
+#plotting G3 by absences
+g3_abs_scatter <- ggplot(combo_data, aes(x = absences, y = G3, color = Sex_f)) + 
+  geom_point(position = "jitter") + 
+  labs(title = "Absences by G3 Scatter Plot", color = "Sex")
+g3_abs_scatter
+```
+
+#### Repeating plots with faceting
+
+```{r}
+#plotting G3 by age with sex
+g3_age_face <- g3_age_scatter + geom_point() +
+                facet_wrap(~ Sex_f)
+g3_age_face
+
+#plotting G3 by age with sex and dating status
+g3_age_face2 <- g3_age_scatter + geom_point() +
+                geom_smooth(method = lm) + #adding for fun
+                facet_grid(romantic_F ~ Sex_f)
+g3_age_face2
+```
+
+Everything is now complete for our exploratory analysis. The final bit of interest was that when looking at the trend line for age by G3 grouped by sex and dating status, was that the male students who were dating showed the sharpest decrease in their trend line for test scores as age increased.
